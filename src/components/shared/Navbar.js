@@ -1,80 +1,281 @@
-'use client';
-import Link from 'next/link';
-import { useState } from 'react';
-import { HeartPulse, Menu, X, User } from 'lucide-react';
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { HeartPulse, Menu, X, LogOut } from "lucide-react";
+
+import { authClient } from "@/lib/auth-client";
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
-  // Mock user state - replace with AuthContext later
-  const user = null; 
+
+  const { data: session } = authClient.useSession();
+
+  const user = session?.user;
+  const role = user?.role?.toLowerCase();
+
+  // Dynamic routes based on role
+  const findDoctorsHref =
+    role === "patient"
+      ? "/dashboard/patient/find-doctors"
+      : "/doctors";
+
+  // Dynamic Dashboard Path Calculation
+  const getDashboardHref = () => {
+    if (role === "admin") return "/dashboard/admin";
+    if (role === "doctor") return "/dashboard/doctor";
+    if (role === "patient") return "/dashboard/patient";
+    return "/dashboard/patient";
+  };
+
+  const dashboardHref = getDashboardHref();
+  const appointmentsHref = "/dashboard/doctor/appointments";
+
+  const handleLogout = async () => {
+    await authClient.signOut();
+    window.location.href = "/login";
+  };
 
   return (
-    <header className="sticky top-0 z-50 bg-base-100 shadow-md">
+    <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
+
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 font-bold text-xl text-primary">
+          <Link
+            href="/"
+            className="flex items-center gap-2 font-bold text-xl"
+          >
             <HeartPulse className="h-8 w-8 text-rose-600" />
-            <span className="text-slate-800">MediCare<span className="text-teal-600">Connect</span></span>
+
+            <span className="text-slate-900">
+              MediCare
+              <span className="text-teal-600">Connect</span>
+            </span>
           </Link>
 
-          {/* Desktop Navigation */}
+          {/* DESKTOP NAVIGATION */}
           <nav className="hidden md:flex items-center gap-6 font-medium text-slate-700">
-            <Link href="/" className="hover:text-teal-600 transition">Home</Link>
-            <Link href="/doctors" className="hover:text-teal-600 transition">Find Doctors</Link>
-            <Link href="/about" className="hover:text-teal-600 transition">About Us</Link>
-            <Link href="/contact" className="hover:text-teal-600 transition">Contact Us</Link>
-            {user && (
-              <Link href="/dashboard" className="hover:text-teal-600 transition">Dashboard</Link>
+
+            {/* Home - Everyone */}
+            <Link
+              href="/"
+              className="hover:text-teal-600 transition-colors"
+            >
+              Home
+            </Link>
+
+            {/* Find Doctors */}
+            <Link
+              href={findDoctorsHref}
+              className="hover:text-teal-600 transition-colors"
+            >
+              Find Doctors
+            </Link>
+
+            {/* Admin / Doctor / Patient Links */}
+            {user && role === "doctor" ? (
+              <>
+                <Link
+                  href="/dashboard/doctor"
+                  className="hover:text-teal-600 transition-colors"
+                >
+                  Dashboard
+                </Link>
+
+                <Link
+                  href={appointmentsHref}
+                  className="hover:text-teal-600 transition-colors"
+                >
+                  Appointments
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/about"
+                  className="hover:text-teal-600 transition-colors"
+                >
+                  About Us
+                </Link>
+
+                <Link
+                  href="/contact"
+                  className="hover:text-teal-600 transition-colors"
+                >
+                  Contact Us
+                </Link>
+
+                {user && (
+                  <Link
+                    href={dashboardHref}
+                    className="hover:text-teal-600 font-semibold text-teal-600 transition-colors"
+                  >
+                    Dashboard
+                  </Link>
+                )}
+              </>
             )}
           </nav>
 
-          {/* Right Action Buttons */}
+          {/* RIGHT ACTION BUTTONS */}
           <div className="hidden md:flex items-center gap-4">
             {user ? (
-              <div className="dropdown dropdown-end">
-                <div tabIndex={0} role="button" className="btn btn-ghost btn-circle avatar">
-                  <div className="w-10 rounded-full ring ring-primary ring-offset-2">
-                    <img src={user?.photoURL || "https://i.ibb.co/mJRqC9L/user-avatar.png"} alt="User" />
-                  </div>
-                </div>
-                <ul tabIndex={0} className="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
-                  <li><Link href="/dashboard/profile">Profile</Link></li>
-                  <li><Link href="/dashboard">Dashboard</Link></li>
-                  <li><button>Logout</button></li>
-                </ul>
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="flex items-center gap-1.5 font-medium text-rose-600 hover:text-rose-700 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </button>
+
+                <span className="font-semibold text-slate-800 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                  {user.name} ({role})
+                </span>
               </div>
             ) : (
               <div className="flex gap-2">
-                <Link href="/login" className="btn btn-outline btn-teal-600 border-teal-600 text-teal-600 hover:bg-teal-600 hover:border-teal-600">Login</Link>
-                <Link href="/register" className="btn bg-teal-600 hover:bg-teal-700 text-white border-none">Register</Link>
+                <Link
+                  href="/login"
+                  className="px-4 py-2 text-sm font-semibold text-teal-600 border border-teal-600 rounded-lg hover:bg-teal-50 transition"
+                >
+                  Login
+                </Link>
+
+                <Link
+                  href="/register"
+                  className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition"
+                >
+                  Register
+                </Link>
               </div>
             )}
           </div>
 
-          {/* Mobile Menu Button */}
+          {/* MOBILE MENU BUTTON */}
           <div className="md:hidden flex items-center">
-            <button onClick={() => setIsOpen(!isOpen)} className="p-2 text-slate-700">
-              {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            <button
+              type="button"
+              onClick={() => setIsOpen(!isOpen)}
+              className="p-2 text-slate-700 hover:text-teal-600 focus:outline-none"
+            >
+              {isOpen ? (
+                <X className="h-6 w-6" />
+              ) : (
+                <Menu className="h-6 w-6" />
+              )}
             </button>
           </div>
+
         </div>
       </div>
 
-      {/* Mobile Menu */}
+      {/* MOBILE MENU */}
       {isOpen && (
-        <div className="md:hidden bg-base-100 border-b px-4 pt-2 pb-4 space-y-2">
-          <Link href="/" className="block py-2 text-slate-700 hover:text-teal-600">Home</Link>
-          <Link href="/doctors" className="block py-2 text-slate-700 hover:text-teal-600">Find Doctors</Link>
-          <Link href="/about" className="block py-2 text-slate-700 hover:text-teal-600">About Us</Link>
-          <Link href="/contact" className="block py-2 text-slate-700 hover:text-teal-600">Contact Us</Link>
-          {!user ? (
-            <div className="pt-2 flex flex-col gap-2">
-              <Link href="/login" className="btn btn-outline w-full">Login</Link>
-              <Link href="/register" className="btn bg-teal-600 text-white w-full">Register</Link>
+        <div className="md:hidden bg-white border-b border-slate-200 px-4 pt-2 pb-4 space-y-2 font-medium">
+
+          {user && (
+            <div className="p-2 border-b border-slate-100 mb-2">
+              <p className="font-semibold text-slate-900 truncate">{user.name}</p>
+              <p className="text-xs text-slate-500 capitalize">{role}</p>
             </div>
+          )}
+
+          <Link
+            href="/"
+            className="block py-2 text-slate-700 hover:text-teal-600"
+            onClick={() => setIsOpen(false)}
+          >
+            Home
+          </Link>
+
+          <Link
+            href={findDoctorsHref}
+            className="block py-2 text-slate-700 hover:text-teal-600"
+            onClick={() => setIsOpen(false)}
+          >
+            Find Doctors
+          </Link>
+
+          {user && role === "doctor" ? (
+            <>
+              <Link
+                href="/dashboard/doctor"
+                className="block py-2 text-slate-700 hover:text-teal-600"
+                onClick={() => setIsOpen(false)}
+              >
+                Dashboard
+              </Link>
+
+              <Link
+                href="/dashboard/doctor/appointments"
+                className="block py-2 text-slate-700 hover:text-teal-600"
+                onClick={() => setIsOpen(false)}
+              >
+                Appointments
+              </Link>
+            </>
           ) : (
-            <Link href="/dashboard" className="block py-2 text-teal-600 font-semibold">Dashboard</Link>
+            <>
+              <Link
+                href="/about"
+                className="block py-2 text-slate-700 hover:text-teal-600"
+                onClick={() => setIsOpen(false)}
+              >
+                About Us
+              </Link>
+
+              <Link
+                href="/contact"
+                className="block py-2 text-slate-700 hover:text-teal-600"
+                onClick={() => setIsOpen(false)}
+              >
+                Contact Us
+              </Link>
+
+              {user && (
+                <Link
+                  href={dashboardHref}
+                  className="block py-2 text-teal-600 font-semibold"
+                  onClick={() => setIsOpen(false)}
+                >
+                  Dashboard
+                </Link>
+              )}
+            </>
+          )}
+
+          {user ? (
+            <button
+              type="button"
+              onClick={async () => {
+                setIsOpen(false);
+                await handleLogout();
+              }}
+              className="block w-full text-left py-2 text-rose-600 hover:text-rose-700 font-semibold"
+            >
+              Logout
+            </button>
+          ) : (
+            <div className="pt-2 flex flex-col gap-2">
+              <Link
+                href="/login"
+                className="w-full text-center py-2 text-sm font-semibold text-teal-600 border border-teal-600 rounded-lg hover:bg-teal-50"
+                onClick={() => setIsOpen(false)}
+              >
+                Login
+              </Link>
+
+              <Link
+                href="/register"
+                className="w-full text-center py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700"
+                onClick={() => setIsOpen(false)}
+              >
+                Register
+              </Link>
+            </div>
           )}
         </div>
       )}

@@ -1,80 +1,219 @@
-'use client';
-import { useState } from 'react';
-import Link from 'next/link';
-import { LogIn, Mail, Lock, HeartPulse } from 'lucide-react';
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Eye, EyeOff, HeartPulse } from "lucide-react";
+
+import { authClient } from "@/lib/auth-client";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const router = useRouter();
 
-  const handleLogin = (e) => {
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // ১. ইমেইল/পাসওয়ার্ড দিয়ে লগইন
+  const handleLogin = async (e) => {
     e.preventDefault();
-    // এখানে আপনার Authentication API বা AuthContext ডিল করবেন
-    alert(`Logging in with: ${email}`);
+    setError("");
+    setLoading(true);
+
+    try {
+      // Step A: Auth Client Sign In with Credentials option
+      const { data, error: authError } = await authClient.signIn.email({
+        email: formData.email,
+        password: formData.password,
+        fetchOptions: {
+          credentials: "include",
+        },
+      });
+
+      if (authError) {
+        setError(authError.message || "Invalid email or password.");
+        setLoading(false);
+        return;
+      }
+
+      // Step B: Fetch Backend User Data (/api/me) to get exact Role
+      let response;
+      try {
+        response = await fetch(`${API_URL}/api/me`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include", // 👈 কুকি নিশ্চিতভাবে ব্যাকএন্ডে পাঠানোর জন্য
+        });
+      } catch (fetchErr) {
+        throw new Error("Unable to connect to backend server.");
+      }
+
+      if (!response.ok) {
+        throw new Error(`Server returned error: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      // Check user details
+      const user = result?.user || data?.user;
+      const userRole = user?.role?.toLowerCase();
+
+      if (!userRole) {
+        setError("Login successful, but user role could not be determined.");
+        setLoading(false);
+        return;
+      }
+
+      // Dynamic Redirect using window.location.href (Cookie Sync Fix)
+      if (userRole === "admin") {
+        window.location.href = "/dashboard/admin";
+      } else if (userRole === "doctor") {
+        window.location.href = "/dashboard/doctor";
+      } else if (userRole === "patient") {
+        window.location.href = "/dashboard/patient";
+      } else {
+        setError("Your account role is not recognized.");
+        setLoading(false);
+      }
+    } catch (err) {
+      if (err.name === "TypeError" && err.message?.includes("Failed to fetch")) {
+        setError("Network error: Unable to reach the backend server.");
+      } else {
+        setError(err.message || "Something went wrong. Please try again.");
+      }
+      setLoading(false);
+    }
+  };
+
+  // ২. Google দিয়ে লগইন
+  const handleGoogleLogin = async () => {
+    try {
+      setGoogleLoading(true);
+      setError("");
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/dashboard/admin",
+      });
+    } catch (err) {
+      setError("Google Login failed. Please try again.");
+      setGoogleLoading(false);
+    }
   };
 
   return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-slate-100 p-8">
         
-        {/* Brand Header */}
-        <div className="text-center mb-8">
+        {/* BRAND HEADER */}
+        <div className="text-center mb-6">
           <Link href="/" className="inline-flex items-center gap-2 text-2xl font-bold text-slate-900">
             <HeartPulse className="h-8 w-8 text-rose-500" />
             <span>MediCare<span className="text-teal-600">Connect</span></span>
           </Link>
-          <h2 className="text-xl font-bold text-slate-800 mt-4">Welcome Back</h2>
-          <p className="text-sm text-slate-500 mt-1">Please enter your credentials to log in.</p>
+          <h2 className="text-xl font-bold text-slate-800 mt-4">Sign In</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Access your account dashboard.
+          </p>
         </div>
 
-        {/* Form */}
+        {/* ERROR DISPLAY */}
+        {error && (
+          <div className="p-3 mb-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600 font-medium">
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* GOOGLE SIGN IN BUTTON */}
+        <button
+          type="button"
+          onClick={handleGoogleLogin}
+          disabled={googleLoading || loading}
+          className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg font-medium text-slate-700 flex items-center justify-center gap-3 transition-colors mb-4"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24">
+            <path
+              fill="#4285F4"
+              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+            />
+            <path
+              fill="#34A853"
+              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+            />
+            <path
+              fill="#FBBC05"
+              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+            />
+            <path
+              fill="#EA4335"
+              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+            />
+          </svg>
+          {googleLoading ? "Connecting..." : "Continue with Google"}
+        </button>
+
+        <div className="relative my-4">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
+          <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-slate-400">Or email</span></div>
+        </div>
+
+        {/* LOGIN FORM */}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1">Email Address</label>
-            <div className="relative">
-              <Mail className="w-5 h-5 absolute left-3 top-3 text-slate-400" />
-              <input
-                type="email"
-                required
-                placeholder="your.email@example.com"
-                className="input input-bordered w-full pl-10"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
+            <input
+              type="email"
+              required
+              placeholder="name@example.com"
+              className="w-full px-4 py-2 border rounded-lg bg-white text-slate-900 border-slate-300 focus:border-teal-600 focus:outline-none"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            />
           </div>
 
           <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="block text-sm font-semibold text-slate-700">Password</label>
-              <a href="#" className="text-xs text-teal-600 hover:underline">Forgot password?</a>
-            </div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Password</label>
             <div className="relative">
-              <Lock className="w-5 h-5 absolute left-3 top-3 text-slate-400" />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 required
                 placeholder="••••••••"
-                className="input input-bordered w-full pl-10"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-2 pr-10 border rounded-lg bg-white text-slate-900 border-slate-300 focus:border-teal-600 focus:outline-none"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-700 focus:outline-none"
+              >
+                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
             </div>
           </div>
 
           <button
             type="submit"
-            className="btn bg-teal-600 hover:bg-teal-700 text-white border-none w-full flex items-center gap-2 mt-6"
+            disabled={loading}
+            className="w-full py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white font-medium rounded-lg transition duration-200 disabled:opacity-50 mt-6"
           >
-            <LogIn className="w-4 h-4" /> Sign In
+            {loading ? "Signing In..." : "Sign In"}
           </button>
         </form>
 
-        {/* Footer Link */}
         <div className="mt-6 text-center text-sm text-slate-600">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{" "}
           <Link href="/register" className="text-teal-600 font-semibold hover:underline">
-            Register here
+            Register
           </Link>
         </div>
 
