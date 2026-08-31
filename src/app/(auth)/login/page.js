@@ -7,8 +7,6 @@ import { Eye, EyeOff, HeartPulse } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-
 export default function LoginPage() {
   const router = useRouter();
 
@@ -29,7 +27,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Step A: Auth Client Sign In with Credentials option
+      // Step A: Auth Client Sign In with Credentials
       const { data, error: authError } = await authClient.signIn.email({
         email: formData.email,
         password: formData.password,
@@ -44,37 +42,29 @@ export default function LoginPage() {
         return;
       }
 
-      // Step B: Fetch Backend User Data (/api/me) to get exact Role
-      let response;
-      try {
-        response = await fetch(`${API_URL}/api/me`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include", // 👈 কুকি নিশ্চিতভাবে ব্যাকএন্ডে পাঠানোর জন্য
+      // Step B: Get User Details & Role safely from Auth Client / Active Session
+      let userRole = data?.user?.role?.toLowerCase();
+
+      // If role is not directly inside data.user, fetch from session context safely
+      if (!userRole) {
+        const session = await authClient.getSession({
+          fetchOptions: { credentials: "include" }
         });
-      } catch (fetchErr) {
-        throw new Error("Unable to connect to backend server.");
+        userRole = session?.data?.user?.role?.toLowerCase();
       }
-
-      if (!response.ok) {
-        throw new Error(`Server returned error: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      // Check user details
-      const user = result?.user || data?.user;
-      const userRole = user?.role?.toLowerCase();
 
       if (!userRole) {
-        setError("Login successful, but user role could not be determined.");
-        setLoading(false);
-        return;
+        // Fallback check if user exists without explicitly set role
+        if (data?.user) {
+          userRole = "patient"; // Default fallback
+        } else {
+          setError("Login successful, but user role could not be determined.");
+          setLoading(false);
+          return;
+        }
       }
 
-      // Dynamic Redirect using window.location.href (Cookie Sync Fix)
+      // Step C: Redirect based on role
       if (userRole === "admin") {
         window.location.href = "/dashboard/admin";
       } else if (userRole === "doctor") {
