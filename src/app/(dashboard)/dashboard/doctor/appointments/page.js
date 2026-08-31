@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   XCircle,
   CircleCheck,
+  AlertTriangle,
 } from "lucide-react";
 
 const API_URL =
@@ -19,11 +20,13 @@ export default function DoctorAppointmentsPage() {
   const [updatingId, setUpdatingId] = useState(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [notice, setNotice] = useState(""); // 🟢 Unverified ডক্টরদের নোটিশ দেখানোর স্টেট
 
   const loadAppointments = async () => {
     try {
       setLoading(true);
       setError("");
+      setNotice("");
 
       const response = await fetch(`${API_URL}/api/doctor/appointments`, {
         method: "GET",
@@ -33,6 +36,15 @@ export default function DoctorAppointmentsPage() {
       const data = await response.json();
 
       if (!response.ok) {
+        // 🟢 অ্যাকাউন্ট Verified না থাকলে ক্র্যাশ না করে ফ্রেন্ডলি মেসেজ দেখানো হবে
+        if (
+          data.message === "Doctor account is not verified" || 
+          data.message?.toLowerCase().includes("not verified")
+        ) {
+          setNotice("Your doctor profile is under review by admin. You can manage appointments once approved.");
+          setAppointments([]);
+          return;
+        }
         throw new Error(data.message || "Failed to load appointments");
       }
 
@@ -115,6 +127,14 @@ export default function DoctorAppointmentsPage() {
           Manage your patient appointments and consultation status.
         </p>
       </div>
+
+      {/* 🟢 Unverified Account Warning Notice */}
+      {notice && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 shadow-sm">
+          <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+          <span>{notice}</span>
+        </div>
+      )}
 
       {/* Messages */}
       {error && (

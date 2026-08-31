@@ -16,24 +16,39 @@ import {
 export default function DoctorDetailsPage({ params: paramsPromise }) {
   const params = use(paramsPromise);
   const [doctor, setDoctor] = useState(null);
+  const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedSlot, setSelectedSlot] = useState("");
   const [bookingLoading, setBookingLoading] = useState(false);
 
-  // ব্যাকএন্ড থেকে নির্দিষ্ট ডাক্তারের তথ্য আনবে
+  // ১. ব্যাকএন্ড থেকে ডাক্তারের প্রোফাইল এবং আসল শিডিউল লোড করা
   useEffect(() => {
-    const fetchDoctorDetails = async () => {
+    const fetchDoctorDetailsAndSchedule = async () => {
       try {
         const baseUrl =
           process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-        const res = await fetch(`${baseUrl}/api/patient/doctors`);
-        const data = await res.json();
 
-        if (data.success && Array.isArray(data.doctors)) {
-          const found = data.doctors.find((d) => d.id === params?.id);
+        // ডক্টর ডিটেইলস আনা
+        const docRes = await fetch(`${baseUrl}/api/patient/doctors`);
+        const docData = await docRes.json();
+
+        if (docData.success && Array.isArray(docData.doctors)) {
+          const found = docData.doctors.find((d) => d.id === params?.id);
           setDoctor(found || null);
+        }
+
+        // ডক্টরের শিডিউল (Days & Time) আনা
+        if (params?.id) {
+          const schedRes = await fetch(
+            `${baseUrl}/api/patient/doctors/${params.id}/schedule`,
+            { credentials: "include" }
+          );
+          const schedData = await schedRes.json();
+          if (schedData.success && Array.isArray(schedData.schedules)) {
+            setSchedules(schedData.schedules);
+          }
         }
       } catch (err) {
         console.error("Fetch doctor details error:", err);
@@ -43,19 +58,43 @@ export default function DoctorDetailsPage({ params: paramsPromise }) {
     };
 
     if (params?.id) {
-      fetchDoctorDetails();
+      fetchDoctorDetailsAndSchedule();
     }
   }, [params?.id]);
 
-  // ডিফল্ট অথবা ব্যাকএন্ডের শিডিউল স্লট
-  const availableSlots = doctor?.availableSlots || [
-    "09:00 AM",
-    "11:00 AM",
-    "02:00 PM",
-    "04:30 PM",
+  // ইউনিক এভেলেবল দিনগুলো (Days) বের করা
+  const availableDays = [
+    ...new Set(schedules.map((s) => s.day).filter(Boolean)),
   ];
 
-  // বুকিং হ্যান্ডেল করার ফাংশন
+  // ডুপ্লিকেট স্লট রিমুভ করে ইউনিক স্লট বের করা
+  const rawSlots = schedules.map((s) => `${s.startTime} - ${s.endTime}`);
+  const availableSlots =
+    schedules.length > 0
+      ? [...new Set(rawSlots.filter((slot) => slot && slot !== "undefined - undefined"))]
+      : ["09:00 AM", "11:00 AM", "02:00 PM", "04:30 PM"];
+
+  // ডেট সিলেক্ট করার সময় চেক করা যে বারটি ডাক্তারের এভেলেবল কি না
+  const handleDateChange = (e) => {
+    const chosenDate = new Date(e.target.value);
+    if (isNaN(chosenDate)) return;
+
+    const dayName = chosenDate.toLocaleDateString("en-US", { weekday: "long" });
+
+    if (availableDays.length > 0 && !availableDays.includes(dayName)) {
+      alert(
+        `Doctor is only available on: ${availableDays.join(
+          ", "
+        )}. Please select a valid day.`
+      );
+      setSelectedDate("");
+      return;
+    }
+
+    setSelectedDate(e.target.value);
+  };
+
+  // বুকিং হ্যান্ডেল করা
   const handleBooking = async (e) => {
     e.preventDefault();
     if (!selectedDate || !selectedSlot) {
@@ -73,7 +112,7 @@ export default function DoctorDetailsPage({ params: paramsPromise }) {
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include", // Authenticated patient request
+        credentials: "include",
         body: JSON.stringify({
           doctorId: doctor.id,
           appointmentDate: selectedDate,
@@ -196,6 +235,29 @@ export default function DoctorDetailsPage({ params: paramsPromise }) {
             <Calendar className="h-5 w-5 text-teal-600" /> Book Appointment
           </h2>
 
+          {/* Available Days Section */}
+          <div className="mb-4 rounded-xl bg-slate-50 p-3">
+            <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-slate-500">
+              <Clock className="h-3.5 w-3.5 text-teal-600" /> Available Days (Week)
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {availableDays.length > 0 ? (
+                availableDays.map((day) => (
+                  <span
+                    key={day}
+                    className="rounded-lg bg-teal-100 px-2.5 py-1 text-xs font-medium text-teal-800"
+                  >
+                    {day}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-slate-400">
+                  No fixed weekly schedule set yet.
+                </span>
+              )}
+            </div>
+          </div>
+
           <form onSubmit={handleBooking} className="space-y-4">
             <div>
               <label className="mb-1 block text-sm font-semibold text-slate-700">
@@ -206,7 +268,7 @@ export default function DoctorDetailsPage({ params: paramsPromise }) {
                 required
                 className="input input-bordered w-full rounded-xl border-slate-200 px-3 py-2 text-slate-700 outline-none focus:border-teal-600"
                 value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
+                onChange={handleDateChange}
               />
             </div>
 
@@ -215,9 +277,9 @@ export default function DoctorDetailsPage({ params: paramsPromise }) {
                 Available Time Slots
               </label>
               <div className="grid grid-cols-2 gap-2">
-                {availableSlots.map((slot) => (
+                {availableSlots.map((slot, idx) => (
                   <button
-                    key={slot}
+                    key={`${slot}-${idx}`}
                     type="button"
                     onClick={() => setSelectedSlot(slot)}
                     className={`rounded-xl border p-2.5 text-xs font-semibold transition ${

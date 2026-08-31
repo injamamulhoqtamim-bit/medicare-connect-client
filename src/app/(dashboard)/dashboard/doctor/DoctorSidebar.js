@@ -32,19 +32,35 @@ export default function DoctorSidebar() {
 
   useEffect(() => {
     async function loadDoctorData() {
-      const sessionUser = sessionData?.user || sessionData?.data?.user;
-
-      if (sessionUser?.name) {
-        setDoctorInfo({
-          name: sessionUser.name,
-          email: sessionUser.email || "",
-          image: sessionUser.image || sessionUser.avatar || "",
-        });
-        setLoading(false);
-        return;
-      }
-
       try {
+        // ১. Session চেক করা
+        const sessionUser = sessionData?.user || sessionData?.data?.user;
+
+        if (sessionUser?.name) {
+          setDoctorInfo({
+            name: sessionUser.name,
+            email: sessionUser.email || "",
+            image: sessionUser.image || sessionUser.avatar || "",
+          });
+          setLoading(false);
+          return;
+        }
+
+        // ২. LocalStorage চেক করা (রেজিস্ট্রেশনের সাথে সাথে এটি কাজ করবে)
+        const storedUser = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          if (parsedUser?.name) {
+            setDoctorInfo({
+              name: parsedUser.name,
+              email: parsedUser.email || "",
+              image: parsedUser.image || parsedUser.avatar || "",
+            });
+            setLoading(false);
+          }
+        }
+
+        // ৩. ব্যাকএন্ড প্রোফাইল API থেকে ডাটা ফেচ করা
         const res = await fetch(`${API_URL}/api/doctor/profile`, {
           method: "GET",
           credentials: "include",
@@ -52,16 +68,15 @@ export default function DoctorSidebar() {
 
         if (res.ok) {
           const data = await res.json();
-          if (data?.success) {
-            setDoctorInfo({
-              name: data.user?.name || data.profile?.name || "Doctor",
-              email: data.user?.email || data.profile?.email || "",
-              image:
-                data.user?.image ||
-                data.profile?.image ||
-                data.profile?.avatar ||
-                "",
-            });
+          // ব্যাকএন্ডের বিভিন্ন ফিল্ড নেম চেক
+          const profile = data.user || data.doctor || data.profile || data;
+
+          if (profile) {
+            setDoctorInfo((prev) => ({
+              name: profile.name || profile.fullName || prev.name || "Doctor",
+              email: profile.email || prev.email || "",
+              image: profile.image || profile.avatar || profile.profileImg || prev.image || "",
+            }));
           }
         }
       } catch (err) {
@@ -76,7 +91,7 @@ export default function DoctorSidebar() {
     }
   }, [sessionData, isPending]);
 
-  // Handle direct image file upload
+  // ছবি আপলোড হ্যান্ডেল করা
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -94,10 +109,19 @@ export default function DoctorSidebar() {
 
       const data = await res.json();
       if (res.ok && data.success) {
+        const newImageUrl = data.imageUrl || data.url || data.image;
         setDoctorInfo((prev) => ({
           ...prev,
-          image: data.imageUrl || data.url,
+          image: newImageUrl,
         }));
+
+        // LocalStorage আপডেট করা
+        const storedUser = localStorage.getItem("user");
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          parsed.image = newImageUrl;
+          localStorage.setItem("user", JSON.stringify(parsed));
+        }
       } else {
         alert(data.message || "Failed to upload image");
       }
@@ -132,14 +156,14 @@ export default function DoctorSidebar() {
     },
     {
       label: "Profile Credentials",
-      href: "/dashboard/doctor/profile", // ✅ URL path for profile
+      href: "/dashboard/doctor/profile",
       icon: User,
     },
   ];
 
   return (
     <aside className="w-64 shrink-0 bg-slate-900 text-slate-300 min-h-screen p-4 flex flex-col border-r border-slate-800">
-      {/* Hidden File Input for Avatar Upload */}
+      {/* Hidden File Input */}
       <input
         type="file"
         ref={fileInputRef}
@@ -160,7 +184,7 @@ export default function DoctorSidebar() {
           </div>
         ) : (
           <>
-            {/* Interactive Image / Initials Avatar */}
+            {/* Interactive Avatar Image */}
             <div className="relative group shrink-0">
               {doctorInfo.image ? (
                 <img
@@ -176,7 +200,7 @@ export default function DoctorSidebar() {
                 </div>
               )}
 
-              {/* Upload Overlay Button */}
+              {/* Upload Button Overlay */}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}

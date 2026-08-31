@@ -7,13 +7,19 @@ import { Camera, Loader2, User } from "lucide-react";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 export default function DoctorProfilePage() {
-  const { data: session } = authClient.useSession();
+  const { data: sessionData, isPending } = authClient.useSession();
   const fileInputRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
+
+  const [userInfo, setUserInfo] = useState({
+    name: "",
+    email: "",
+    verificationStatus: "pending",
+  });
 
   const [formData, setFormData] = useState({
     image: "",
@@ -26,30 +32,60 @@ export default function DoctorProfilePage() {
   });
 
   useEffect(() => {
-    async function fetchProfile() {
+    async function loadFullProfile() {
       try {
+        let user = sessionData?.user || sessionData?.data?.user;
+
+        // ১. LocalStorage থেকে ইউজার ডাটা ফলব্যাক
+        if (!user && typeof window !== "undefined") {
+          const storedUser = localStorage.getItem("user");
+          if (storedUser) {
+            user = JSON.parse(storedUser);
+          }
+        }
+
+        if (user) {
+          setUserInfo({
+            name: user.name || "",
+            email: user.email || "",
+            verificationStatus: user.verificationStatus || "pending",
+          });
+        }
+
+        // ২. ব্যাকএন্ড থেকে ডক্টর প্রোফাইল ফেচ করা
         const res = await fetch(`${API_URL}/api/doctor/profile`, {
           method: "GET",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
         });
 
-        if (!res.ok) throw new Error(`Server status: ${res.status}`);
+        if (res.ok) {
+          const data = await res.json();
+          const profile = data.profile || data.doctor || data.data;
 
-        const data = await res.json();
+          if (profile) {
+            setFormData({
+              image: profile.image || profile.avatar || user?.image || "",
+              phone: profile.phone || "",
+              degrees: profile.degrees || "",
+              specialties: Array.isArray(profile.specialties)
+                ? profile.specialties.join(", ")
+                : profile.specialties || "",
+              bio: profile.bio || "",
+              experience: profile.experience || "",
+              consultationFee: profile.consultationFee || 0,
+            });
 
-        if (data.success && data.profile) {
-          setFormData({
-            image: data.profile.image || session?.user?.image || "",
-            phone: data.profile.phone || "",
-            degrees: data.profile.degrees || "",
-            specialties: Array.isArray(data.profile.specialties)
-              ? data.profile.specialties.join(", ")
-              : data.profile.specialties || "",
-            bio: data.profile.bio || "",
-            experience: data.profile.experience || "",
-            consultationFee: data.profile.consultationFee || 0,
-          });
+            if (profile.verificationStatus || profile.user?.verificationStatus) {
+              setUserInfo((prev) => ({
+                ...prev,
+                verificationStatus:
+                  profile.verificationStatus ||
+                  profile.user?.verificationStatus ||
+                  prev.verificationStatus,
+              }));
+            }
+          }
         }
       } catch (err) {
         console.error("Failed to load doctor profile:", err);
@@ -58,24 +94,22 @@ export default function DoctorProfilePage() {
       }
     }
 
-    if (session?.user) {
-      fetchProfile();
+    if (!isPending) {
+      loadFullProfile();
     }
-  }, [session]);
+  }, [sessionData, isPending]);
 
-  // Handle Image Selection and Direct Upload / Preview (Fixed Blob ERR_FILE_NOT_FOUND)
+  // ছবির প্রিভিউ ও আপলোড হ্যান্ডলিং
   const handleImageChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // 1. Safe Instant Preview using FileReader (prevents blob link expiry issues)
     const reader = new FileReader();
     reader.onloadend = () => {
       setFormData((prev) => ({ ...prev, image: reader.result }));
     };
     reader.readAsDataURL(file);
 
-    // 2. Upload file to Backend API
     const imageFormData = new FormData();
     imageFormData.append("image", file);
 
@@ -92,11 +126,21 @@ export default function DoctorProfilePage() {
       const data = await res.json();
 
       if (res.ok && data.success) {
-        // Set actual permanent image URL returned from server
+        const newImageUrl = data.imageUrl || data.url || data.image;
         setFormData((prev) => ({
           ...prev,
-          image: data.imageUrl || data.url,
+          image: newImageUrl,
         }));
+        
+        if (typeof window !== "undefined") {
+          const storedUser = localStorage.getItem("user");
+          if (storedUser) {
+            const parsed = JSON.parse(storedUser);
+            parsed.image = newImageUrl;
+            localStorage.setItem("user", JSON.stringify(parsed));
+          }
+        }
+
         setMessage({
           type: "success",
           text: "Profile picture uploaded successfully!",
@@ -115,7 +159,6 @@ export default function DoctorProfilePage() {
       });
     } finally {
       setUploadingImage(false);
-      // Clear input so selecting the same file again triggers onChange
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -151,7 +194,7 @@ export default function DoctorProfilePage() {
 
       const data = await res.json();
 
-      if (data.success) {
+      if (res.ok && (data.success || data.profile)) {
         setMessage({
           type: "success",
           text: "Profile credentials updated successfully! Pending admin approval.",
@@ -173,19 +216,21 @@ export default function DoctorProfilePage() {
     }
   };
 
-  if (loading) {
+  if (loading || isPending) {
     return (
-      <div className="flex h-64 items-center justify-center font-medium text-slate-500">
-        Loading profile details...
+      <div className="flex h-64 items-center justify-center font-medium text-slate-500 gap-2">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+        <span>Loading profile details...</span>
       </div>
     );
   }
 
-  const status = session?.user?.verificationStatus || "pending";
+  const status = userInfo.verificationStatus || "pending";
   const isVerified = status === "verified";
 
   return (
     <div className="mx-auto my-6 max-w-4xl rounded-xl border border-slate-100 bg-white p-6 shadow-md">
+      {/* Verification Banner */}
       <div
         className={`mb-6 flex items-center justify-between rounded-lg p-4 text-sm font-semibold ${
           isVerified
@@ -219,7 +264,7 @@ export default function DoctorProfilePage() {
         </div>
       )}
 
-      {/* Profile Image File Upload Section */}
+      {/* Avatar Section */}
       <div className="mb-8 flex flex-col items-center sm:flex-row sm:items-center gap-6 pb-6 border-b border-slate-100">
         <input
           type="file"
@@ -229,7 +274,7 @@ export default function DoctorProfilePage() {
           className="hidden"
         />
 
-        <div className="relative group w-24 h-24 rounded-full overflow-hidden border-4 border-slate-100 bg-slate-100 shadow-md">
+        <div className="relative group w-24 h-24 rounded-full overflow-hidden border-4 border-slate-100 bg-slate-100 shadow-md shrink-0">
           {formData.image ? (
             <img
               src={formData.image}
@@ -275,15 +320,17 @@ export default function DoctorProfilePage() {
         </div>
       </div>
 
+      {/* Form Section */}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Full Name</label>
             <input
               type="text"
-              value={session?.user?.name || ""}
+              value={userInfo.name}
               disabled
-              className="w-full cursor-not-allowed rounded-md border border-slate-300 bg-slate-100 p-2.5 text-slate-500"
+              placeholder="Doctor Name"
+              className="w-full cursor-not-allowed rounded-md border border-slate-300 bg-slate-100 p-2.5 text-slate-500 font-medium"
             />
           </div>
 
@@ -291,9 +338,10 @@ export default function DoctorProfilePage() {
             <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
             <input
               type="email"
-              value={session?.user?.email || ""}
+              value={userInfo.email}
               disabled
-              className="w-full cursor-not-allowed rounded-md border border-slate-300 bg-slate-100 p-2.5 text-slate-500"
+              placeholder="doctor@example.com"
+              className="w-full cursor-not-allowed rounded-md border border-slate-300 bg-slate-100 p-2.5 text-slate-500 font-medium"
             />
           </div>
         </div>
@@ -384,9 +432,16 @@ export default function DoctorProfilePage() {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-md bg-blue-600 px-4 py-3 font-medium text-white transition duration-200 hover:bg-blue-700 disabled:opacity-50"
+          className="w-full rounded-md bg-blue-600 px-4 py-3 font-medium text-white transition duration-200 hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
         >
-          {submitting ? "Saving Profile..." : "Save Profile Credentials"}
+          {submitting ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Saving Profile...</span>
+            </>
+          ) : (
+            "Save Profile Credentials"
+          )}
         </button>
       </form>
     </div>

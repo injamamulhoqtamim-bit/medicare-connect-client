@@ -102,12 +102,18 @@ export default function RegisterPage() {
         }
       }
 
+      // 🟢 FIX: Better-Auth এর জন্য role, requestedRole এবং body অবজেক্টে ডাটা পাস করা হয়েছে
       const { data, error: authError } = await authClient.signUp.email({
         name: formData.name,
         email: formData.email,
         password: formData.password,
         image: imageUrl,
-        role: formData.role, // Pass selected role directly
+        role: formData.role,
+        requestedRole: formData.role,
+        body: {
+          role: formData.role,
+          requestedRole: formData.role,
+        },
       });
 
       if (authError) {
@@ -116,11 +122,23 @@ export default function RegisterPage() {
         return;
       }
 
+      // LocalStorage-এ ইউজার ডাটা সেভ রাখা
+      const userPayload = {
+        name: formData.name,
+        email: formData.email,
+        image: imageUrl,
+        role: formData.role,
+      };
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("user", JSON.stringify(userPayload));
+      }
+
       if (formData.role === "doctor") {
         setSuccess("Account created! Redirecting to setup...");
         setTimeout(() => {
-          window.location.href = "/dashboard/doctor/profile";
-        }, 1200);
+          window.location.href = "/dashboard/profile";
+        }, 1000);
       } else {
         setSuccess("Account created successfully!");
         setTimeout(() => {
@@ -141,7 +159,7 @@ export default function RegisterPage() {
       setError("");
       await authClient.signIn.social({
         provider: "google",
-        callbackURL: `/dashboard/role-selection`, // Google Sign Up এর ক্ষেত্রে Role Select পেজে রিডাইরেক্ট করবে
+        callbackURL: `/dashboard/role-selection`,
       });
     } catch (err) {
       setError("Google Sign-up failed.");
