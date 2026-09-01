@@ -3,100 +3,175 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
-  CalendarDays,
-  ClipboardList,
-  FileText,
-  UserCircle,
-  LogOut,
+LayoutDashboard,
+CalendarDays,
+ClipboardList,
+FileText,
+UserCircle,
+LogOut,
+Stethoscope,
 } from "lucide-react";
 
+import { authClient } from "@/lib/auth-client";
+
 export default function DoctorSidebar() {
-  const pathname = usePathname();
+const pathname = usePathname();
 
-  const menuItems = [
-    {
-      label: "Dashboard Overview",
-      href: "/dashboard/doctor",
-      icon: LayoutDashboard,
-    },
-    {
-      label: "Manage Schedules",
-      href: "/dashboard/doctor/schedule",
-      icon: CalendarDays,
-    },
-    {
-      label: "Appointments",
-      href: "/dashboard/doctor/appointments",
-      icon: ClipboardList,
-    },
-    {
-      label: "Prescription Cabin",
-      href: "/dashboard/doctor/prescriptions",
-      icon: FileText,
-    },
-    {
-      label: "Profile Credentials",
-      href: "/dashboard/profile",
-      icon: UserCircle,
-    },
-  ];
+const { data: session } = authClient.useSession();
 
-  return (
-    <aside className="w-64 shrink-0 bg-slate-900 text-slate-300 min-h-[calc(100vh-73px)] p-4 flex flex-col justify-between">
-      
+const user = session?.user;
+
+const doctorName = user?.name || "Doctor";
+const doctorImage = user?.image || "";
+
+const API_URL =
+process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+const menuItems = [
+{
+label: "Dashboard Overview",
+href: "/dashboard/doctor",
+icon: LayoutDashboard,
+},
+{
+label: "Manage Schedules",
+href: "/dashboard/doctor/schedule",
+icon: CalendarDays,
+},
+{
+label: "Appointments",
+href: "/dashboard/doctor/appointments",
+icon: ClipboardList,
+},
+{
+label: "Prescription Cabin",
+href: "/dashboard/doctor/prescriptions",
+icon: FileText,
+},
+{
+label: "Profile Credentials",
+href: "/dashboard/profile",
+icon: UserCircle,
+},
+];
+
+const isActive = (href) => {
+if (href === "/dashboard/doctor") {
+return pathname === href;
+}
+
+
+return pathname.startsWith(href);
+
+
+};
+
+const handleLogout = async () => {
+try {
+await authClient.signOut();
+window.location.href = "/login";
+} catch (error) {
+console.error("Logout failed:", error);
+}
+};
+
+const getImageUrl = () => {
+if (!doctorImage) return "";
+
+
+if (doctorImage.startsWith("http")) {
+  return doctorImage;
+}
+
+return `${API_URL}${
+  doctorImage.startsWith("/") ? "" : "/"
+}${doctorImage}`;
+
+
+};
+
+return ( <aside className="w-72 shrink-0 min-h-screen bg-white border-r border-slate-200 flex flex-col shadow-sm">
+{/* Doctor Panel Header */} <div className="px-6 py-5 border-b border-slate-200"> <div className="flex items-center gap-3"> <div className="w-11 h-11 rounded-xl bg-teal-600 flex items-center justify-center"> <Stethoscope className="w-6 h-6 text-white" /> </div>
+
+
       <div>
-        {/* Sidebar Title */}
-        <div className="px-4 py-3 mb-4">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-            Doctor Panel
-          </p>
+        <h2 className="font-bold text-lg text-slate-900">
+          Doctor Panel
+        </h2>
 
-          <h2 className="mt-1 text-lg font-bold text-white">
-            Doctor Dashboard
-          </h2>
-        </div>
+        <p className="text-xs text-slate-500">
+          MediCare Connect
+        </p>
+      </div>
+    </div>
+  </div>
 
-        {/* Navigation */}
-        <nav className="space-y-1">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-
-            const isActive =
-              pathname === item.href ||
-              (item.href !== "/dashboard/doctor" &&
-                pathname.startsWith(item.href));
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition ${
-                  isActive
-                    ? "bg-teal-600 text-white font-semibold"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                }`}
-              >
-                <Icon className="w-5 h-5 shrink-0" />
-
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+  {/* Doctor Profile */}
+  <div className="px-5 py-6 border-b border-slate-200">
+    <div className="flex flex-col items-center text-center">
+      {/* Doctor Image */}
+      <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-teal-100 bg-slate-100 flex items-center justify-center mb-3">
+        {doctorImage ? (
+          <img
+            src={getImageUrl()}
+            alt={doctorName}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <UserCircle className="w-12 h-12 text-slate-400" />
+        )}
       </div>
 
-      {/* Exit Dashboard */}
-      <div className="pt-4 border-t border-slate-800">
+      {/* Doctor Name */}
+      <h3 className="font-bold text-lg text-slate-900 truncate max-w-full">
+        {doctorName}
+      </h3>
+
+      {/* Doctor Role */}
+      <p className="text-sm text-teal-600 font-medium mt-1">
+        Doctor
+      </p>
+    </div>
+  </div>
+
+  {/* Navigation */}
+  <nav className="flex-1 px-4 py-5 space-y-2">
+    {menuItems.map((item) => {
+      const Icon = item.icon;
+      const active = isActive(item.href);
+
+      return (
         <Link
-          href="/"
-          className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-rose-400 hover:bg-rose-500/10 transition"
+          key={item.href}
+          href={item.href}
+          className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+            active
+              ? "bg-teal-600 text-white shadow-sm"
+              : "text-slate-600 hover:bg-teal-50 hover:text-teal-700"
+          }`}
         >
-          <LogOut className="w-5 h-5" />
+          <Icon className="w-5 h-5 shrink-0" />
 
-          <span>Exit Dashboard</span>
+          <span>{item.label}</span>
         </Link>
-      </div>
-    </aside>
-  );
+      );
+    })}
+  </nav>
+
+  {/* Exit Dashboard */}
+  <div className="px-4 py-5 border-t border-slate-200">
+    <button
+      type="button"
+      onClick={handleLogout}
+      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-rose-600 font-medium hover:bg-rose-50 transition"
+    >
+      <LogOut className="w-5 h-5" />
+
+      <span>Exit Dashboard</span>
+    </button>
+  </div>
+</aside>
+
+
+);
 }
