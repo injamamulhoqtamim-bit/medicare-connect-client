@@ -18,16 +18,16 @@ const navItems = [
   },
   {
     name: "Manage Users",
-    href: "/dashboard/admin/manage-users", // আগে ছিল /manage-users-account
+    href: "/dashboard/admin/manage-users",
     icon: UserCog,
   },
   {
     name: "Manage Doctors",
-    href: "/dashboard/admin/manage-doctors", // নতুন যোগ করা হয়েছে (আপনার ফোল্ডারে আছে)
+    href: "/dashboard/admin/manage-doctors",
     icon: Stethoscope,
   },
   {
-    name: "Verify Doctor Licence",
+    name: "Verify Doctors",
     href: "/dashboard/admin/verify-doctors",
     icon: ShieldCheck,
   },
