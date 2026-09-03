@@ -99,66 +99,122 @@ export default function DoctorProfilePage() {
     }
   }, [sessionData, isPending]);
 
-  // ছবির প্রিভিউ ও আপলোড হ্যান্ডলিং
+  // ImgBB এর মাধ্যমে ছবির প্রিভিউ ও আপলোড হ্যান্ডলিং
   const handleImageChange = async (e) => {
     const file = e.target.files?.[0];
+
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setFormData((prev) => ({ ...prev, image: reader.result }));
-    };
-    reader.readAsDataURL(file);
-
-    const imageFormData = new FormData();
-    imageFormData.append("image", file);
 
     try {
       setUploadingImage(true);
       setMessage({ type: "", text: "" });
 
-      const res = await fetch(`${API_URL}/api/doctor/upload-avatar`, {
-        method: "POST",
-        credentials: "include",
-        body: imageFormData,
+      // ==========================================
+      // 1. Upload image to ImgBB
+      // ==========================================
+      const apiKey = process.env.NEXT_PUBLIC_IMGBB_API_KEY;
+
+      if (!apiKey) {
+        throw new Error("ImgBB API key is missing.");
+      }
+
+      const imageFormData = new FormData();
+      imageFormData.append("image", file);
+
+      const imgbbResponse = await fetch(
+        `https://api.imgbb.com/1/upload?key=${apiKey}`,
+        {
+          method: "POST",
+          body: imageFormData,
+        }
+      );
+
+      const imgbbData = await imgbbResponse.json();
+
+      if (!imgbbResponse.ok || !imgbbData.success) {
+        throw new Error(
+          imgbbData?.error?.message || "ImgBB image upload failed."
+        );
+      }
+
+      const newImageUrl = imgbbData.data.url;
+
+      console.log("ImgBB Image URL:", newImageUrl);
+
+      // ==========================================
+      // 2. Show image immediately
+      // ==========================================
+      setFormData((prev) => ({
+        ...prev,
+        image: newImageUrl,
+      }));
+
+      // ==========================================
+      // 3. Save image URL to localStorage
+      // ==========================================
+      if (typeof window !== "undefined") {
+        const storedUser = localStorage.getItem("user");
+
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+
+          parsed.image = newImageUrl;
+
+          localStorage.setItem("user", JSON.stringify(parsed));
+        }
+      }
+
+      // ==========================================
+      // 4. Save image URL to backend/MongoDB
+      // ==========================================
+      const saveResponse = await fetch(
+        `${API_URL}/api/doctor/profile`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            image: newImageUrl,
+            phone: formData.phone,
+            degrees: formData.degrees,
+            specialties: formData.specialties
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+            bio: formData.bio,
+            experience: formData.experience,
+            consultationFee:
+              Number(formData.consultationFee) || 0,
+          }),
+        }
+      );
+
+      const saveData = await saveResponse.json();
+
+      if (!saveResponse.ok || !saveData.success) {
+        throw new Error(
+          saveData.message || "Failed to save image URL."
+        );
+      }
+
+      setMessage({
+        type: "success",
+        text: "Profile picture uploaded successfully!",
       });
 
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        const newImageUrl = data.imageUrl || data.url || data.image;
-        setFormData((prev) => ({
-          ...prev,
-          image: newImageUrl,
-        }));
-        
-        if (typeof window !== "undefined") {
-          const storedUser = localStorage.getItem("user");
-          if (storedUser) {
-            const parsed = JSON.parse(storedUser);
-            parsed.image = newImageUrl;
-            localStorage.setItem("user", JSON.stringify(parsed));
-          }
-        }
-
-        setMessage({
-          type: "success",
-          text: "Profile picture uploaded successfully!",
-        });
-      } else {
-        setMessage({
-          type: "error",
-          text: data.message || "Failed to upload image.",
-        });
-      }
     } catch (error) {
       console.error("Image upload error:", error);
+
       setMessage({
         type: "error",
-        text: "Server error occurred during image upload.",
+        text: error.message || "Failed to upload image.",
       });
+
     } finally {
       setUploadingImage(false);
+
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
